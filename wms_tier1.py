@@ -23,24 +23,24 @@ from py_ads_client import ADSClient, ADSSymbol, BOOL, INT, LREAL
 
 # ── Connection settings ───────────────────────────────────────────────────────
 
-PLC_IP       = "127.0.0.1"
-PLC_NET_ID   = "127.0.0.1.1.1"
-PLC_PORT     = 851
+PLC_IP = "127.0.0.1"
+PLC_NET_ID = "127.0.0.1.1.1"
+PLC_PORT = 851
 LOCAL_NET_ID = "127.0.0.1.1.2"
 
 # ── Machine state codes ───────────────────────────────────────────────────────
 
-STATE_AT_HOME      = 101
-STATE_AT_IMAGING   = 120
-STATE_AT_SLOT      = 140
+STATE_AT_HOME = 101
+STATE_AT_IMAGING = 120
+STATE_AT_SLOT = 140
 
 # ── Physical measurements (millimetres) ──────────────────────────────────────
 
-BLOCK_SIZE   = 60      # each block is 60x60 mm
-AREA_WIDTH   = 400     # storage area is 400 mm wide
-AREA_HEIGHT  = 300     # storage area is 300 mm tall
-PALLET_X     = 160.0   # pallet centre X when at transfer slot
-PALLET_Y     = 410.0   # pallet centre Y when at transfer slot
+BLOCK_SIZE = 60      # each block is 60x60 mm
+AREA_WIDTH = 400     # storage area is 400 mm wide
+AREA_HEIGHT = 300     # storage area is 300 mm tall
+PALLET_X = 160.0   # pallet centre X when at transfer slot
+PALLET_Y = 410.0   # pallet centre Y when at transfer slot
 
 
 # =============================================================================
@@ -52,10 +52,10 @@ class StorageSlot:
     """One grid position where a block can be stored."""
 
     def __init__(self, column, row, x, y):
-        self.column  = column
-        self.row     = row
-        self.x       = x        # physical X position in mm
-        self.y       = y        # physical Y position in mm
+        self.column = column
+        self.row = row
+        self.x = x        # physical X position in mm
+        self.y = y        # physical Y position in mm
         self.product = None     # None means the slot is empty
 
     def is_empty(self):
@@ -81,8 +81,8 @@ class StorageGrid:
         self.slots = []
         half = BLOCK_SIZE / 2
 
-        columns = AREA_WIDTH  // BLOCK_SIZE   # = 6
-        rows    = AREA_HEIGHT // BLOCK_SIZE   # = 5
+        columns = AREA_WIDTH // BLOCK_SIZE   # = 6
+        rows = AREA_HEIGHT // BLOCK_SIZE   # = 5
 
         for col in range(columns):
             for row in range(rows):
@@ -182,16 +182,22 @@ class MachineConnection:
         self.connected = False
 
         # ADS symbols - these are the variable names the machine understands
-        self.sym_conveyor_state     = ADSSymbol("StatusVars.ConveyorState",       INT)
-        self.sym_lifter_state       = ADSSymbol("StatusVars.LifterState",         INT)
-        self.sym_send_pallet        = ADSSymbol("Remote.send_pallet",             BOOL)
-        self.sym_release_imaging    = ADSSymbol("Remote.release_from_imaging",    BOOL)
-        self.sym_return_pallet      = ADSSymbol("Remote.return_pallet",           BOOL)
-        self.sym_transfer_item      = ADSSymbol("Remote.transfer_item",           BOOL)
-        self.sym_src_x              = ADSSymbol("Remote.src_x",                   LREAL)
-        self.sym_src_y              = ADSSymbol("Remote.src_y",                   LREAL)
-        self.sym_dst_x              = ADSSymbol("Remote.dst_x",                   LREAL)
-        self.sym_dst_y              = ADSSymbol("Remote.dst_y",                   LREAL)
+        self.sym_conveyor_state = ADSSymbol(
+            "StatusVars.ConveyorState",       INT)
+        self.sym_lifter_state = ADSSymbol(
+            "StatusVars.LifterState",         INT)
+        self.sym_send_pallet = ADSSymbol(
+            "Remote.send_pallet",             BOOL)
+        self.sym_release_imaging = ADSSymbol(
+            "Remote.release_from_imaging",    BOOL)
+        self.sym_return_pallet = ADSSymbol(
+            "Remote.return_pallet",           BOOL)
+        self.sym_transfer_item = ADSSymbol(
+            "Remote.transfer_item",           BOOL)
+        self.sym_src_x = ADSSymbol("Remote.src_x",                   LREAL)
+        self.sym_src_y = ADSSymbol("Remote.src_y",                   LREAL)
+        self.sym_dst_x = ADSSymbol("Remote.dst_x",                   LREAL)
+        self.sym_dst_y = ADSSymbol("Remote.dst_y",                   LREAL)
 
     def connect(self):
         """Open connection to the machine."""
@@ -267,11 +273,11 @@ class WMSController:
     """
 
     def __init__(self, on_update):
-        self.machine   = MachineConnection()
+        self.machine = MachineConnection()
         self.warehouse = Warehouse()
-        self.grid      = StorageGrid()
+        self.grid = StorageGrid()
         self.on_update = on_update   # function to call when UI needs refreshing
-        self.busy      = False
+        self.busy = False
 
     def connect(self):
         """Connect to the simulator."""
@@ -360,11 +366,20 @@ class WMSController:
                 self.on_update("ERROR: Timed out waiting for transfer slot.")
                 return
 
-            # Step 5: move block from pallet to storage slot
-            self.on_update(f"Storing block in slot {slot.label()}...")
+            # Step 5: pause so block is visible in transfer slot
+            # The lifter cannot reach from home directly to storage.
+            # The block must first be in the transfer slot, then the
+            # lifter moves it from the transfer slot to the storage slot.
+            self.on_update(
+                "Block arrived at transfer slot - lifter preparing...")
+            time.sleep(2.0)
+
+            # Step 6: move block from transfer slot to storage slot
+            self.on_update(
+                f"Lifter moving block to storage slot {slot.label()}...")
             self.machine.transfer_item(PALLET_X, PALLET_Y, slot.x, slot.y)
 
-            # Step 6: return pallet home
+            # Step 7: return pallet home
             self.on_update("Returning pallet home...")
             self.machine.return_pallet()
             ok = self.machine.wait_for_state(STATE_AT_HOME)
@@ -400,7 +415,8 @@ class WMSController:
             # Step 2: find which slot holds this product
             slot = self.grid.find_slot_with_product(product_name)
             if slot is None:
-                self.on_update(f"ERROR: Could not find '{product_name}' in storage.")
+                self.on_update(
+                    f"ERROR: Could not find '{product_name}' in storage.")
                 return
 
             # Step 3: wait for pallet at home
@@ -426,9 +442,17 @@ class WMSController:
                 self.on_update("ERROR: Timed out waiting for transfer slot.")
                 return
 
-            # Step 6: move block from storage slot to pallet
-            self.on_update(f"Retrieving block from slot {slot.label()}...")
+            # Step 6: move block from storage slot to transfer slot (pallet)
+            # The lifter picks the block from storage and places it
+            # onto the pallet which is waiting in the transfer slot.
+            self.on_update(
+                f"Lifter retrieving block from slot {slot.label()}...")
             self.machine.transfer_item(slot.x, slot.y, PALLET_X, PALLET_Y)
+
+            # Pause so the block is visibly on the pallet in the transfer slot
+            self.on_update(
+                "Block placed on pallet in transfer slot - returning home...")
+            time.sleep(2.0)
 
             # Step 7: return pallet home
             self.on_update("Returning pallet home...")
@@ -678,7 +702,8 @@ class App(tk.Tk):
         """Called when user clicks RECEIVE."""
         product = self.product_entry.get().strip()
         if not product:
-            messagebox.showwarning("Missing input", "Please enter a product name.")
+            messagebox.showwarning(
+                "Missing input", "Please enter a product name.")
             return
         self.receive_btn.config(state="disabled")
         self.dispatch_btn.config(state="disabled")
@@ -688,7 +713,8 @@ class App(tk.Tk):
         """Called when user clicks DISPATCH."""
         product = self.product_entry.get().strip()
         if not product:
-            messagebox.showwarning("Missing input", "Please enter a product name.")
+            messagebox.showwarning(
+                "Missing input", "Please enter a product name.")
             return
         self.receive_btn.config(state="disabled")
         self.dispatch_btn.config(state="disabled")
@@ -728,7 +754,8 @@ class App(tk.Tk):
         if self.controller.warehouse.event_log:
             self.log_text.config(state="normal")
             self.log_text.delete("1.0", "end")
-            self.log_text.insert("1.0", "\n".join(self.controller.warehouse.event_log))
+            self.log_text.insert("1.0", "\n".join(
+                self.controller.warehouse.event_log))
             self.log_text.see("end")
             self.log_text.config(state="disabled")
 
@@ -737,10 +764,11 @@ class App(tk.Tk):
         if self.controller.machine.connected and not self.controller.busy:
             try:
                 conveyor = self.controller.machine.read_conveyor_state()
-                lifter   = self.controller.machine.read_lifter_state()
+                lifter = self.controller.machine.read_lifter_state()
 
-                conveyor_color = "#a6e3a1" if conveyor in (101, 120, 140) else "#f9e2af"
-                lifter_color   = "#f9e2af" if lifter == 1 else "#a6e3a1"
+                conveyor_color = "#a6e3a1" if conveyor in (
+                    101, 120, 140) else "#f9e2af"
+                lifter_color = "#f9e2af" if lifter == 1 else "#a6e3a1"
 
                 self.conveyor_label.config(
                     text=f"Conveyor: state {conveyor}",
