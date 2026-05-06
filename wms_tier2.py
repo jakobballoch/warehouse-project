@@ -396,7 +396,12 @@ class WMSController:
                 self.on_update("ERROR: Timed out waiting for transfer slot.")
                 return
 
-            self.on_update(f"Storing block in slot {slot.label()}...")
+            self.on_update(
+                "Block arrived at transfer slot - lifter preparing...")
+            time.sleep(2.0)
+
+            self.on_update(
+                f"Lifter moving block to storage slot {slot.label()}...")
             self.machine.transfer_item(PALLET_X, PALLET_Y, slot.x, slot.y)
 
             self.on_update("Returning pallet home...")
@@ -451,8 +456,13 @@ class WMSController:
                 self.on_update("ERROR: Timed out waiting for transfer slot.")
                 return
 
-            self.on_update(f"Retrieving block from slot {slot.label()}...")
+            self.on_update(
+                f"Lifter retrieving block from slot {slot.label()}...")
             self.machine.transfer_item(slot.x, slot.y, PALLET_X, PALLET_Y)
+
+            self.on_update(
+                "Block placed on pallet in transfer slot - returning home...")
+            time.sleep(2.0)
 
             self.on_update("Returning pallet home...")
             self.machine.return_pallet()
